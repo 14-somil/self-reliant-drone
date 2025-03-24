@@ -44,10 +44,13 @@ def plot_flight_paths(file1, file2, label1='Results', label2='Waypoints'):
     plt.tight_layout()
     plt.show()
 
-# Example usage
-if __name__ == "__main__":
+def main():
     # Replace these with your actual file paths
     file1 = '/home/plague/flight_log_20250324_172104.csv'
     file2 = '/home/plague/waypoints.csv'  # Replace with your second file
     
     plot_flight_paths(file1, file2, label1='Results', label2='Waypoints')
+
+# Example usage
+if __name__ == "__main__":
+    main()
