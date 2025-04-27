@@ -97,14 +97,14 @@ class WaypointNavigation(Node):
             ]
 
     def init_log_file(self):
-        """Initialize the log file for position data."""
+        """Initialize the log file for position and yaw data."""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f'flight_log_{timestamp}.csv'
         self.log_file = open(filename, 'w', newline='')
         self.csv_writer = csv.writer(self.log_file)
-        # Write header with position only
-        self.csv_writer.writerow(['timestamp', 'x', 'y', 'z'])
-        self.get_logger().info(f'Logging flight position data to {filename}')
+        # Write header with position and yaw
+        self.csv_writer.writerow(['timestamp', 'x', 'y', 'z', 'yaw'])
+        self.get_logger().info(f'Logging flight data to {filename}')
 
     def vehicle_local_position_callback(self, vehicle_local_position):
         """Callback function for vehicle_local_position topic subscriber."""
@@ -121,7 +121,7 @@ class WaypointNavigation(Node):
         self.vehicle_status = vehicle_status
 
     def log_vehicle_state(self):
-        """Log the vehicle position to CSV file."""
+        """Log the vehicle position and yaw to CSV file."""
         if self.csv_writer is None:
             return
             
@@ -133,8 +133,11 @@ class WaypointNavigation(Node):
         y = self.vehicle_local_position.y
         z = self.vehicle_local_position.z
         
-        # Write only position data to CSV
-        self.csv_writer.writerow([timestamp, x, y, z])
+        # Convert quaternion to yaw
+        yaw = self.vehicle_local_position.heading
+        
+        # Write position and yaw data to CSV
+        self.csv_writer.writerow([timestamp, x, y, z, yaw])
 
     def quaternion_to_euler(self, q):
         """Convert quaternion to Euler angles (roll, pitch, yaw)."""
