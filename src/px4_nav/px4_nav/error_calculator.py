@@ -105,7 +105,7 @@ def main(args = None) -> None:
         pass
     finally:
         error_calculator.log_file.close()
-        error_calculator.get_logger().error(f'Absolute error is {error_calculator.cummulative_error/error_calculator.counter}')
+        error_calculator.get_logger().info(f"'\033[94mAbsolute error is {error_calculator.cummulative_error/error_calculator.counter} '\033[0m")
         error_calculator.plot()
         error_calculator.destroy_node()
         rclpy.shutdown()

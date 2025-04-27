@@ -21,7 +21,7 @@ setup(
     entry_points={
         'console_scripts': [
             'bench_mark = px4_nav.bench_mark:main',
-            'position_plotter= px4_nav.position_plotter:main',
+            'error_calculator = px4_nav.error_calculator:main',
             'path_efficiency = px4_nav.path_efficiency:main',
             'yaw_plotter = px4_nav.yaw_plotter:main',
             'gz_ros_bridge = px4_nav.gz_ros_bridge:main',
