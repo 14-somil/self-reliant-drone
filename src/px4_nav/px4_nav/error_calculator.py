@@ -23,7 +23,7 @@ class ErrorCalculator(Node):
         )
 
         self.create_subscription(VehicleOdometry, '/fmu/out/vehicle_odometry', self.ros_callback, qos_profile)
-        self.gz_node.subscribe(Pose_V, '/world/default/dynamic_pose/info', self.gz_callback)
+        self.gz_node.subscribe(Pose_V, '/world/lawn/dynamic_pose/info', self.gz_callback)
 
         self.estimated_location = []
         self.actual_location = []
@@ -64,7 +64,9 @@ class ErrorCalculator(Node):
 
             self.csv_writer.writerow([timestamp, self.actual_location[0], self.actual_location[1], self.estimated_location[0], self.estimated_location[1]])
 
-            self.cummulative_error = abs(math.sqrt(self.actual_location[0] ** 2 + self.actual_location[1] ** 2) - math.sqrt(self.estimated_location[0] ** 2 + self.estimated_location[1] ** 2))
+            self.get_logger().info(f'Logged data at {timestamp}')
+
+            self.cummulative_error += abs(math.sqrt(self.actual_location[0] ** 2 + self.actual_location[1] ** 2) - math.sqrt(self.estimated_location[0] ** 2 + self.estimated_location[1] ** 2))
             self.counter += 1
     
     def plot(self):
@@ -105,7 +107,7 @@ def main(args = None) -> None:
         pass
     finally:
         error_calculator.log_file.close()
-        error_calculator.get_logger().info(f"'\033[94mAbsolute error is {error_calculator.cummulative_error/error_calculator.counter} '\033[0m")
+        error_calculator.get_logger().info(f"\033[94mAbsolute error is {error_calculator.cummulative_error/error_calculator.counter} \033[0m")
         error_calculator.plot()
         error_calculator.destroy_node()
         rclpy.shutdown()

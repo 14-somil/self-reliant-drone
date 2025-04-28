@@ -23,7 +23,7 @@ class LivePlotter(Node):
         )
 
         self.create_subscription(VehicleOdometry, '/fmu/out/vehicle_odometry', self.ros_callback, qos_profile)
-        self.gz_node.subscribe(Pose_V, '/world/default/dynamic_pose/info', self.gz_callback)
+        self.gz_node.subscribe(Pose_V, '/world/lawn/dynamic_pose/info', self.gz_callback)
 
         self.gz_positions = []
         self.ros2_positions = []

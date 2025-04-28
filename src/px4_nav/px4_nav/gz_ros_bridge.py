@@ -30,14 +30,7 @@ class GzRosBridge(Node):
 
     def enu_to_ned_quaternion(self, q):
         # Convert ENU quaternion [x, y, z, w] to [w, x, y, z] for transforms3d
-        q_enu = [q.w, q.x, q.y, q.z]
-
-        # 180-degree rotation about X axis (ENU to NED)
-        rot180_x = transforms3d.quaternions.axangle2quat([1, 0, 0], np.pi)
-        q_ned = transforms3d.quaternions.qmult(rot180_x, q_enu)
-
-        # Return as [x, y, z, w]
-        return [q_ned[1], q_ned[2], q_ned[3], q_ned[0]]
+       return [q.w, q.y, q.x, -q.z]
 
     def gz_callback(self, msg) -> None:
         published_msg = VehicleOdometry()
@@ -69,7 +62,7 @@ class GzRosBridge(Node):
             -msg.twist.angular.z
         ]
 
-        self.get_logger().info(f'Published VehicleOdometry at {published_msg.timestamp}')
+        self.get_logger().info(f'Published Vehicle Odometry at {published_msg.timestamp}')
         self.ros_publisher.publish(published_msg)
 
 def main(args=None) -> None:

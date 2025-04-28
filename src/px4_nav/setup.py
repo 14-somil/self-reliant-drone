@@ -26,6 +26,8 @@ setup(
             'yaw_plotter = px4_nav.yaw_plotter:main',
             'gz_ros_bridge = px4_nav.gz_ros_bridge:main',
             'live_position_plotter = px4_nav.live_position_plotter:main',
+            'image_translator = px4_nav.image_translator:main',
+            'optical_flow = px4_nav.optical_flow:main',
         ],
     },
 )
