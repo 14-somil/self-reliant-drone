@@ -23,7 +23,7 @@ class ErrorCalculator(Node):
         )
 
         self.create_subscription(VehicleOdometry, '/fmu/out/vehicle_odometry', self.ros_callback, qos_profile)
-        self.gz_node.subscribe(Pose_V, '/world/lawn/dynamic_pose/info', self.gz_callback)
+        self.gz_node.subscribe(Pose_V, '/world/default/dynamic_pose/info', self.gz_callback)
 
         self.estimated_location = []
         self.actual_location = []
@@ -66,7 +66,7 @@ class ErrorCalculator(Node):
 
             self.get_logger().info(f'Logged data at {timestamp}')
 
-            self.cummulative_error += abs(math.sqrt(self.actual_location[0] ** 2 + self.actual_location[1] ** 2) - math.sqrt(self.estimated_location[0] ** 2 + self.estimated_location[1] ** 2))
+            self.cummulative_error += math.sqrt((self.actual_location[0] - self.estimated_location[0]) ** 2 + (self.actual_location[1] - self.estimated_location[1]) ** 2)
             self.counter += 1
     
     def plot(self):

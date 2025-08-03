@@ -66,14 +66,14 @@ class OpticalFlow(Node):
         flow_msg.timestamp = self.get_clock().now().nanoseconds // 1000  # ROS time in microseconds
         flow_msg.pixel_flow[1] = float(avg_flow_x)
         flow_msg.pixel_flow[0] = float(avg_flow_y)
-        flow_msg.delta_angle = [0.0, 0.0, 0.0]
+        flow_msg.delta_angle = [np.nan, np.nan, np.nan]
         flow_msg.delta_angle_available = False
         flow_msg.distance_available = False
         flow_msg.integration_timespan_us = int(1e6 / 60)  # Assuming 30 FPS camera
         flow_msg.quality = 255  # Assume perfect quality for now
         flow_msg.max_flow_rate = 5.0  # Random reasonable dpixel_flow_y_integralefault
         flow_msg.min_ground_distance = 0.5
-        flow_msg.max_ground_distance = 10.0
+        flow_msg.max_ground_distance = float(10)
 
         self.optical_flow_publisher.publish(flow_msg)
 
