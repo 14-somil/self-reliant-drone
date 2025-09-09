@@ -44,7 +44,7 @@ class WaypointNavigation(Node):
 
         # Create subscribers
         self.vehicle_local_position_subscriber = self.create_subscription(
-            VehicleLocalPosition, '/fmu/out/vehicle_local_position', self.vehicle_local_position_callback, qos_profile)
+            VehicleLocalPosition, '/fmu/out/vehicle_local_position_v1', self.vehicle_local_position_callback, qos_profile)
         self.vehicle_status_subscriber = self.create_subscription(
             VehicleStatus, '/fmu/out/vehicle_status_v1', self.vehicle_status_callback, qos_profile)
 
@@ -64,7 +64,7 @@ class WaypointNavigation(Node):
         self.csv_writer = None
         
         # Load waypoints from CSV file
-        self.load_waypoints('/home/plague/auto_drone_ws/src/px4_nav/px4_nav/waypoints.csv')
+        self.load_waypoints('/home/plague/self_reliant_drone/src/px4_nav/px4_nav/waypoints.csv')
         
         # Initialize CSV output file
         self.init_log_file()
