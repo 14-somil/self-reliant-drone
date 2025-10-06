@@ -129,19 +129,25 @@ class DroneNode(Node):
     #axes for rotation and orientation maintained as it is
 
     def _get_position(self):
-        return np.concatenate(self.vehicle_odom.position[:2], -self.vehicle_odom.position[2])
-    
+        return np.array([self.vehicle_odom.position[0], 
+                        self.vehicle_odom.position[1], 
+                        -self.vehicle_odom.position[2]])    
     def _get_vel(self):
-        return np.concatenate(self.vehicle_odom.velocity[:2], -self.vehicle_odom.velocity[2], self.vehicle_odom.angular_velocity)
-    
+        return np.array([self.vehicle_odom.velocity[0],
+                        self.vehicle_odom.velocity[1],
+                        -self.vehicle_odom.velocity[2],
+                        self.vehicle_odom.angular_velocity[0],
+                        self.vehicle_odom.angular_velocity[1],
+                        self.vehicle_odom.angular_velocity[2]])
+
     def _get_orientation(self):
         q = self.vehicle_odom.q
 
         pitch = math.atan2(2.0 * (q[1] * q[2] + q[0] * q[1]), q[0] * q[0] - q[1] * q[1] - q[2] * q[2] + q[3] * q[3])
-        roll = math.asin(-2.0 * (q[1] * q[3] - q[0] * q[2]))
+        roll = math.asin(2.0 * (q[1] * q[3] - q[0] * q[2]))
         yaw = -math.atan2(2.0 * (q[1] * q[2] + q[0] * q[3]), q[0] * q[0] + q[1] * q[1] - q[2] * q[2] - q[3] * q[3])
 
-        return np.concatenate(math.degrees(roll), math.degrees(pitch), math.degrees(yaw))
+        return np.array([math.degrees(roll), math.degrees(pitch), math.degrees(yaw)])
 
     def timer_callback(self):
         self.publish_offboardcontrol_heartbeat_signal()
@@ -212,6 +218,7 @@ class DroneEnv(gym.Env):
         self.target_position = np.array([0.0, 0.0, 3.0])
         self.sway_accumulation = np.array([0.0, 0.0, 0.0])
         self.episode_counter = 0
+        self.steps_beyond_terminated = 0
 
     def _spin(self):
         try:
@@ -278,20 +285,21 @@ class DroneEnv(gym.Env):
         return norm_and_clipped
 
     def _get_observation(self):
-        pos = self.node._get_position
-        vel = self.node._get_vel
-        orientation = self._get_observation
+        pos = self.node._get_position()
+        vel = self.node._get_vel()
+        orientation = self._get_observation()
 
         orientation = np.deg2rad(orientation)
 
-        return self._clip_and_normalize(np.concatenate(pos, orientation, vel))
+        return self._clip_and_normalize(np.concatenate([pos, orientation, vel]))
 
     def _get_original_observation(self):
-        return np.concatenate(self.node._get_position, self.node._get_orientation, self.node._get_vel)
+        return np.concatenate([self.node._get_position(), self.node._get_orientation(), self.node._get_vel()])
 
-    def reset(self, intial_position = None): #position = np.array([x,y,z])
+    def reset(self, seed = None, options = None, intial_position = None): #position = np.array([x,y,z])
 
         #TODO: randomized initial position
+        super().reset(seed=seed)
 
         if intial_position is None:
             intial_position = np.array([0.0, 0.0, 0.0])
@@ -334,7 +342,7 @@ class DroneEnv(gym.Env):
         
         return False
 
-    def reward(self, terminated, action):
+    def _get_reward(self, terminated, action):
         state = self._get_original_observation()
         current_position = state[:3]
         roll, pitch, yaw = state[3:6]

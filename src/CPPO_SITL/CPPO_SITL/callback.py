@@ -8,7 +8,7 @@ class TensorboardCallback(BaseCallback):
         super(TensorboardCallback, self).__init__(verbose)
         self.episode_rewards = []
         self.episode_lengths = []
-        self.last_100_rewards = []
+        self.last_20_rewards = []
 
     def _on_training_start(self) -> None:
         # Initialize arrays here to ensure self.model is available
@@ -26,10 +26,10 @@ class TensorboardCallback(BaseCallback):
             if dones[i]:
                 self.episode_rewards.append(self.current_rewards[i])
                 self.episode_lengths.append(self.current_lengths[i])
-                self.last_100_rewards.append(self.current_rewards[i])
+                self.last_20_rewards.append(self.current_rewards[i])
 
-                if len(self.last_100_rewards) > 20:
-                    self.last_100_rewards.pop(0)
+                if len(self.last_20_rewards) > 20:
+                    self.last_20_rewards.pop(0)
 
                 # Print current episode's reward and length
                 # print(f"Episode {len(self.episode_rewards)} - Reward: {self.current_rewards[i]}, Length: {self.current_lengths[i]}")
@@ -46,7 +46,7 @@ class TensorboardCallback(BaseCallback):
     def _on_rollout_end(self) -> None:
         mean_reward = np.mean(self.episode_rewards) if self.episode_rewards else 0
         mean_length = np.mean(self.episode_lengths) if self.episode_lengths else 0
-        mean_reward_last_20 = np.mean(self.last_100_rewards[-20:]) if len(self.last_100_rewards) >= 20 else 0
+        mean_reward_last_20 = np.mean(self.last_20_rewards[-20:]) if len(self.last_20_rewards) >= 20 else 0
 
         # Print the average metrics
         # print(f"Mean Reward: {mean_reward}, Mean Length: {mean_length}, Mean Reward Last 20: {mean_reward_last_20}")
