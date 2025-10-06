@@ -144,7 +144,7 @@ class DroneNode(Node):
         q = self.vehicle_odom.q
 
         pitch = math.atan2(2.0 * (q[1] * q[2] + q[0] * q[1]), q[0] * q[0] - q[1] * q[1] - q[2] * q[2] + q[3] * q[3])
-        roll = math.asin(2.0 * (q[1] * q[3] - q[0] * q[2]))
+        roll = math.asin(-2.0 * (q[1] * q[3] - q[0] * q[2]))
         yaw = -math.atan2(2.0 * (q[1] * q[2] + q[0] * q[3]), q[0] * q[0] + q[1] * q[1] - q[2] * q[2] - q[3] * q[3])
 
         return np.array([math.degrees(roll), math.degrees(pitch), math.degrees(yaw)])
@@ -287,7 +287,7 @@ class DroneEnv(gym.Env):
     def _get_observation(self):
         pos = self.node._get_position()
         vel = self.node._get_vel()
-        orientation = self._get_observation()
+        orientation = self.node._get_orientation()
 
         orientation = np.deg2rad(orientation)
 
@@ -296,15 +296,15 @@ class DroneEnv(gym.Env):
     def _get_original_observation(self):
         return np.concatenate([self.node._get_position(), self.node._get_orientation(), self.node._get_vel()])
 
-    def reset(self, seed = None, options = None, intial_position = None): #position = np.array([x,y,z])
+    def reset(self, seed = None, options = None, initial_position = None): #position = np.array([x,y,z])
 
         #TODO: randomized initial position
         super().reset(seed=seed)
 
-        if intial_position is None:
-            intial_position = np.array([0.0, 0.0, 0.0])
+        if initial_position is None:
+            initial_position = np.array([0.0, 0.0, 0.0])
         
-        self._goto(intial_position)
+        self._goto(initial_position)
         time.sleep(0.01) # wait to update the current position of drone
 
         self.node.actuator_motor_control = [-1.0] * 4
@@ -396,6 +396,7 @@ class DroneEnv(gym.Env):
         original_action = action
         self.node.actuator_motor_control = original_action #in range [-1, 1]
 
+        time.sleep(0.1)
         observation = self._get_observation()
         truncated = self.step_counter >= self.max_steps
         terminated = self._get_done()
@@ -405,11 +406,11 @@ class DroneEnv(gym.Env):
 
         info = {
             'original_action': action,
-            'original_observatio': self._get_original_observation(),
+            'original_observation': self._get_original_observation(),
             'reward': reward
         }
 
-        step_duration = time.perf_counter() - self.start_time
+        step_duration = time.perf_counter() - start_time
         info['step_duration'] = step_duration
 
         self.step_counter += 1
