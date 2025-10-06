@@ -49,7 +49,7 @@ class DroneNode(Node):
             qos_profile, 
             callback_group= self.cb_group
             )
-        self.vehicle_status_sunscriber = self.create_subscription(
+        self.vehicle_status_subscriber = self.create_subscription(
             VehicleStatus, 
             '/fmu/out/vehicle_status_v1', 
             self.vehicle_status_callback, 
@@ -143,9 +143,14 @@ class DroneNode(Node):
     def _get_orientation(self):
         q = self.vehicle_odom.q
 
-        pitch = math.atan2(2.0 * (q[1] * q[2] + q[0] * q[1]), q[0] * q[0] - q[1] * q[1] - q[2] * q[2] + q[3] * q[3])
-        roll = math.asin(-2.0 * (q[1] * q[3] - q[0] * q[2]))
-        yaw = -math.atan2(2.0 * (q[1] * q[2] + q[0] * q[3]), q[0] * q[0] + q[1] * q[1] - q[2] * q[2] - q[3] * q[3])
+        w, x, y, z = q[0], q[1], q[2], q[3]
+
+        # Roll (x-axis rotation)
+        roll = math.atan2(2.0 * (w * x + y * z), 1.0 - 2.0 * (x * x + y * y))
+        # Pitch (y-axis rotation)
+        pitch = math.asin(2.0 * (w * y - z * x))
+        # Yaw (z-axis rotation) 
+        yaw = -math.atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
 
         return np.array([math.degrees(roll), math.degrees(pitch), math.degrees(yaw)])
 
