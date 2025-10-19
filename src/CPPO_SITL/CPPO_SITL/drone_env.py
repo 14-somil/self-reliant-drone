@@ -5,6 +5,12 @@
 # _get_info
 # _get_original_observation
 # add randomization in reset
+# improve logging
+# update get_done
+# check orientation and angular velocity axis
+
+#resolve drift issues, check vehicel local odometry
+#speed up training
 
 import rclpy
 import csv
@@ -13,10 +19,10 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 from rclpy.callback_groups import ReentrantCallbackGroup
 from px4_msgs.msg import OffboardControlMode, TrajectorySetpoint, VehicleCommand, VehicleLocalPosition, VehicleStatus, ActuatorMotors, VehicleOdometry
+from std_msgs.msg import Float32
 from datetime import datetime
 import os
 import time
-from enum import Enum, auto
 import gymnasium as gym
 from gymnasium import spaces
 import threading
@@ -41,6 +47,7 @@ class DroneNode(Node):
         self.offboard_control_mode_publisher = self.create_publisher(OffboardControlMode, '/fmu/in/offboard_control_mode', qos_profile)
         self.vehicle_command_publisher = self.create_publisher(VehicleCommand, '/fmu/in/vehicle_command', qos_profile)
         self.actuator_motor_publisher = self.create_publisher(ActuatorMotors, '/fmu/in/actuator_motors', qos_profile)
+        self.reward_publisher = self.create_publisher(Float32, '/training_reward', qos_profile)
 
         self.vehicle_odometry_subscriber = self.create_subscription(
             VehicleOdometry, 
@@ -62,7 +69,12 @@ class DroneNode(Node):
         self.offboard_mode_counter = 0
         self.actuator_motor_control = None #[-1, 1]
 
-        self.timer = self.create_timer(0.05, self.timer_callback, callback_group=self.cb_group)
+        self.timer = self.create_timer(0.01, self.timer_callback, callback_group=self.cb_group)
+
+    def publish_reward(self, reward):
+        msg = Float32()
+        msg.data = reward
+        self.reward_publisher.publish(msg)
 
     def vehicle_odometry_callback(self, msg):
         self.vehicle_odom = msg
@@ -89,7 +101,7 @@ class DroneNode(Node):
 
         self.actuator_motor_publisher.publish(msg)
 
-        self.get_logger().info(f'Sent control signals: {msg.control}')
+        # self.get_logger().info(f'Sent control signals: {msg.control}')
 
     def publish_vehicle_command(self, command, **params) -> None:
         """Publish a vehicle command."""
@@ -157,10 +169,10 @@ class DroneNode(Node):
     def timer_callback(self):
         self.publish_offboardcontrol_heartbeat_signal()
 
-        if(self.offboard_mode_counter < 21):
+        if(self.offboard_mode_counter < 101):
             self.offboard_mode_counter += 1
         
-        if(self.offboard_mode_counter > 20):
+        if(self.offboard_mode_counter > 100):
             if(self.vehicle_status.nav_state != VehicleStatus.NAVIGATION_STATE_OFFBOARD):
                 self.engage_offboard_mode()
             
@@ -172,12 +184,19 @@ class DroneNode(Node):
                     self.publish_actuator_motors(self.actuator_motor_control)
 
 class DroneEnv(gym.Env):
+    metadata = {'render_modes': []}
+
     def __init__(self, is_training=True):
         super(DroneEnv, self).__init__()
 
         self.gz_node = gz.transport13.Node()
 
-        rclpy.init(args=None)
+        try:
+            if not rclpy.ok():
+                rclpy.init(args=None)
+        except RuntimeError:
+            pass
+
         self.node = DroneNode()
         self.spin_thread = threading.Thread(target=self._spin, daemon=True)
         self.spin_thread.start()
@@ -219,11 +238,13 @@ class DroneEnv(gym.Env):
         self.time_on_ground = 0
         self.start_time = time.perf_counter()
         self.step_counter = 0
-        self.max_steps = 500
+        self.max_steps = 1000
         self.target_position = np.array([0.0, 0.0, 3.0])
         self.sway_accumulation = np.array([0.0, 0.0, 0.0])
         self.episode_counter = 0
         self.steps_beyond_terminated = 0
+        self.total_steps = 0
+        self.is_odom_stabilised = True
 
     def _spin(self):
         try:
@@ -300,6 +321,19 @@ class DroneEnv(gym.Env):
 
     def _get_original_observation(self):
         return np.concatenate([self.node._get_position(), self.node._get_orientation(), self.node._get_vel()])
+    
+    def wait(self, initial_position):
+        start_time = time.time()
+        threshold = 0.75
+
+        while(time.time() - start_time < 10):
+            position = self._get_original_observation()[:3]
+
+            if(abs(position[0]-initial_position[0]) < threshold and abs(position[1] - initial_position[1]) < threshold):
+                self.is_odom_stabilised = True
+                break
+
+        self.is_odom_stabilised = False
 
     def reset(self, seed = None, options = None, initial_position = None): #position = np.array([x,y,z])
 
@@ -309,13 +343,14 @@ class DroneEnv(gym.Env):
         if initial_position is None:
             initial_position = np.array([0.0, 0.0, 0.0])
         
-        self._goto(initial_position)
-        time.sleep(0.01) # wait to update the current position of drone
-
         self.node.actuator_motor_control = [-1.0] * 4
+
+        self._goto(initial_position)
+        self.wait(initial_position) #Wait to stabilise the odometry 
 
         self.sway_accumulation = np.array([0.0, 0.0, 0.0])
         self.last_step_time = time.perf_counter()
+        self.total_steps += self.step_counter
         self.time_on_ground = 0
         self.step_counter = 0
         self.steps_beyond_terminated = 0
@@ -326,6 +361,8 @@ class DroneEnv(gym.Env):
         }
 
         self.episode_counter += 1
+        self.node.get_logger().info(f'Total steps completed: {self.total_steps}')
+        self.node.get_logger().info(f'Starting episode: {self.episode_counter}')
 
         return initial_observation, info
     
@@ -341,6 +378,10 @@ class DroneEnv(gym.Env):
         if pos[2] > MAX_Z or pos[0] < -MAX_XY or pos[0] > MAX_XY or pos[1] < -MAX_XY or pos[1] > MAX_XY:
             self.node.get_logger().info(f'Drone out of limits. Terminating current step.')
             return True
+        
+        # if(roll > math.pi/3 or roll < -math.pi/3 or pitch > math.pi/3 or pitch < -math.pi/3):
+        #     self.node.get_logger().info(f'Pitch or Roll too steep. Terminating step.')
+        #     return True
         
         if self.step_counter >= self.max_steps:
             return True
@@ -401,13 +442,14 @@ class DroneEnv(gym.Env):
         original_action = action
         self.node.actuator_motor_control = original_action #in range [-1, 1]
 
-        time.sleep(0.1)
+        time.sleep(0.01)
         observation = self._get_observation()
-        truncated = self.step_counter >= self.max_steps
+        truncated = (self.step_counter >= self.max_steps) or (not self.is_odom_stabilised)
         terminated = self._get_done()
         done:bool = terminated or truncated
 
         reward = self._get_reward(terminated, original_action)
+        self.node.publish_reward(reward) # Added a reward publisher
 
         info = {
             'original_action': action,
@@ -426,5 +468,5 @@ class DroneEnv(gym.Env):
         self._goto([0.0, 0.0, 0.0])
         self.node.actuator_motor_control = [-1.0] * 4
 
-        self.node.destroy_node()
-        rclpy.shutdown()
+        if self.node:
+            self.node.destroy_node()

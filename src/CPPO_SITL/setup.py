@@ -24,7 +24,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'test = CPPO_SITL.test_script:main'
+            'test = CPPO_SITL.test_script:main',
+            'train = CPPO_SITL.train:main'
         ],
     },
 )

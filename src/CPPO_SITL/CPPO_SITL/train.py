@@ -1,5 +1,10 @@
 #!/home/plague/pyenv_ros/bin/python3
 
+#TODO:
+#1. fix compass calibration issue
+#2. fix mesagging
+#3. check euler angle calculations
+
 import gymnasium as gym
 from gymnasium.envs.registration import register
 from stable_baselines3.common.env_util import make_vec_env
