@@ -2,3 +2,5 @@ build
 log
 install
 notes.txt
+healthy.yaml
+unhealthy.yaml

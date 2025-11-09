@@ -9,8 +9,9 @@
 # update get_done
 # check orientation and angular velocity axis
 
-#resolve drift issues, check vehicel local odometry
-#speed up training
+# resolve drift issues, check vehicel local odometry # sensor calibration
+# speed up training
+# is stabilised off kar diya again
 
 import rclpy
 import csv
@@ -20,6 +21,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPo
 from rclpy.callback_groups import ReentrantCallbackGroup
 from px4_msgs.msg import OffboardControlMode, TrajectorySetpoint, VehicleCommand, VehicleLocalPosition, VehicleStatus, ActuatorMotors, VehicleOdometry
 from std_msgs.msg import Float32
+from geometry_msgs.msg import Pose
 from datetime import datetime
 import os
 import time
@@ -30,6 +32,15 @@ import gz.transport13
 from gz.msgs10.boolean_pb2 import Boolean
 from gz.msgs10.pose_pb2 import Pose
 import math
+from enum import Enum, auto
+
+class CalibrationState(Enum):
+    NAVIGATION = auto()
+    CALIBRATE = auto()
+
+class OdomPublisher(Enum):
+    PX4 = auto()
+    GZ = auto()
 
 class DroneNode(Node):
     def __init__(self):
@@ -49,13 +60,24 @@ class DroneNode(Node):
         self.actuator_motor_publisher = self.create_publisher(ActuatorMotors, '/fmu/in/actuator_motors', qos_profile)
         self.reward_publisher = self.create_publisher(Float32, '/training_reward', qos_profile)
 
-        self.vehicle_odometry_subscriber = self.create_subscription(
+        self.odom_publisher_flag = OdomPublisher.GZ
+        if self.odom_publisher_flag == OdomPublisher.PX4:
+            self.vehicle_odometry_subscriber = self.create_subscription(
             VehicleOdometry, 
             '/fmu/out/vehicle_odometry', 
             self.vehicle_odometry_callback, 
             qos_profile, 
             callback_group= self.cb_group
             )
+        elif self.odom_publisher_flag == OdomPublisher.GZ:
+            self.vehicle_odometry_subscriber = self.create_subscription(
+            VehicleOdometry, 
+            '/gz_position', 
+            self.vehicle_odometry_callback, 
+            qos_profile, 
+            callback_group= self.cb_group
+            )
+        
         self.vehicle_status_subscriber = self.create_subscription(
             VehicleStatus, 
             '/fmu/out/vehicle_status_v1', 
@@ -68,6 +90,7 @@ class DroneNode(Node):
         self.vehicle_status = VehicleStatus()
         self.offboard_mode_counter = 0
         self.actuator_motor_control = None #[-1, 1]
+        self.calibration_state = CalibrationState.NAVIGATION
 
         self.timer = self.create_timer(0.01, self.timer_callback, callback_group=self.cb_group)
 
@@ -122,13 +145,13 @@ class DroneNode(Node):
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         self.vehicle_command_publisher.publish(msg)
     
-    def arm(self):
-        self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, param1=1.0)
+    def arm(self): # Forced Disarm and Arm commmands
+        self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, param1=1.0) #param2 = 21196.0 for forced
 
         self.get_logger().info("Arm Command sent")
 
     def disarm(self):
-        self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, param1=0.0)
+        self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_COMPONENT_ARM_DISARM, param1=0.0) #param2 = 21196.0 for forced
 
         self.get_logger().info("Disarm Command sent")
 
@@ -158,13 +181,36 @@ class DroneNode(Node):
         w, x, y, z = q[0], q[1], q[2], q[3]
 
         # Roll (x-axis rotation)
-        roll = math.atan2(2.0 * (w * x + y * z), 1.0 - 2.0 * (x * x + y * y))
+        roll = math.atan2(2.0 * (x*w + y*z), (- x*x - y*y + z*z + w*w))
         # Pitch (y-axis rotation)
-        pitch = math.asin(2.0 * (w * y - z * x))
+        pitch = math.asin(-2.0 * (z*x - w*y))
         # Yaw (z-axis rotation) 
-        yaw = -math.atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
+        yaw = math.atan2(2.0 * (x*y + w*z), (x*x - y*y - z*z + w*w))
 
         return np.array([math.degrees(roll), math.degrees(pitch), math.degrees(yaw)])
+    
+    def calibrate(self):
+        self.calibration_state = CalibrationState.CALIBRATE
+
+        if self.vehicle_status.arming_state == VehicleStatus.ARMING_STATE_ARMED:
+            self.disarm()
+        
+        self.publish_vehicle_command(
+            VehicleCommand.VEHICLE_CMD_PREFLIGHT_CALIBRATION, 
+            param1=1.0, 
+            param2=1.0, 
+            param3=1.0, 
+            param5=1.0, 
+            param6=1.0, 
+            param7=1.0
+            )
+
+        time.sleep(1)
+        while self.vehicle_status.calibration_enabled == True:
+            time.sleep(0.01)
+        
+        self.get_logger().info(f'Calibration completed')
+        self.calibration_state = CalibrationState.NAVIGATION
 
     def timer_callback(self):
         self.publish_offboardcontrol_heartbeat_signal()
@@ -175,12 +221,20 @@ class DroneNode(Node):
         if(self.offboard_mode_counter > 100):
             if(self.vehicle_status.nav_state != VehicleStatus.NAVIGATION_STATE_OFFBOARD):
                 self.engage_offboard_mode()
-            
-            if(self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD and self.vehicle_status.arming_state == VehicleStatus.ARMING_STATE_DISARMED):
+
+            if(
+                self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD and
+                self.vehicle_status.arming_state == VehicleStatus.ARMING_STATE_DISARMED and
+                self.calibration_state == CalibrationState.NAVIGATION
+            ):
                 self.arm()
-            
-            else:
-                if self.actuator_motor_control is not None: 
+
+            if(
+                self.vehicle_status.nav_state == VehicleStatus.NAVIGATION_STATE_OFFBOARD and
+                self.vehicle_status.arming_state == VehicleStatus.ARMING_STATE_ARMED and
+                self.calibration_state == CalibrationState.NAVIGATION
+            ):
+                if self.actuator_motor_control is not None:
                     self.publish_actuator_motors(self.actuator_motor_control)
 
 class DroneEnv(gym.Env):
@@ -343,10 +397,8 @@ class DroneEnv(gym.Env):
         if initial_position is None:
             initial_position = np.array([0.0, 0.0, 0.0])
         
-        self.node.actuator_motor_control = [-1.0] * 4
-
+        self.node.actuator_motor_control = 4 * [-1.0]
         self._goto(initial_position)
-        self.wait(initial_position) #Wait to stabilise the odometry 
 
         self.sway_accumulation = np.array([0.0, 0.0, 0.0])
         self.last_step_time = time.perf_counter()
@@ -444,7 +496,7 @@ class DroneEnv(gym.Env):
 
         time.sleep(0.01)
         observation = self._get_observation()
-        truncated = (self.step_counter >= self.max_steps) or (not self.is_odom_stabilised)
+        truncated = (self.step_counter >= self.max_steps)
         terminated = self._get_done()
         done:bool = terminated or truncated
 
