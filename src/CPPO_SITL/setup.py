@@ -30,7 +30,8 @@ setup(
             'test = CPPO_SITL.test_script:main',
             'train = CPPO_SITL.train:main',
             'state_publisher = CPPO_SITL.state_publisher:main',
-            'gz_bridge = CPPO_SITL.gz_pose_publisher:main'
+            'gz_bridge = CPPO_SITL.gz_pose_publisher:main',
+            'inference = CPPO_SITL.inference:main'
         ],
     },
 )

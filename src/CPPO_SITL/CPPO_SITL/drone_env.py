@@ -1,15 +1,7 @@
 #!/home/plague/pyenv_ros/bin/python3
 
 #TODO:
-# _get_observation
-# _get_info
-# _get_original_observation
 # add randomization in reset
-# improve logging
-# update get_done
-# check orientation and angular velocity axis
-
-# resolve drift issues, check vehicel local odometry # sensor calibration
 # speed up training
 # is stabilised off kar diya again
 
