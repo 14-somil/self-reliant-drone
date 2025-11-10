@@ -64,6 +64,6 @@ tensorboard_callback = TensorboardCallback()
 eval_callback = EvalCallback(eval_env, best_model_save_path='./models/best_model', log_path='./logs/', eval_freq=5000, deterministic=True, render=False)
 callback = CallbackList([checkpoint_callback, tensorboard_callback, eval_callback])
 
-model_ppo.learn(total_timesteps=8000000, callback=callback)
+model_ppo.learn(total_timesteps=4000000, callback=callback)
 
 model_ppo.save("ppoc_quadcopter_final")

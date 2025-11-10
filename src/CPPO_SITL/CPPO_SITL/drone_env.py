@@ -164,21 +164,21 @@ class DroneNode(Node):
     #axes for rotation and orientation maintained as it is
 
     def _get_position(self):
-        return np.array([self.vehicle_odom.position[0], 
-                        self.vehicle_odom.position[1], 
+        return np.array([self.vehicle_odom.position[1], 
+                        self.vehicle_odom.position[0], 
                         -self.vehicle_odom.position[2]])    
     def _get_vel(self):
-        return np.array([self.vehicle_odom.velocity[0],
-                        self.vehicle_odom.velocity[1],
+        return np.array([self.vehicle_odom.velocity[1],
+                        self.vehicle_odom.velocity[0],
                         -self.vehicle_odom.velocity[2],
-                        self.vehicle_odom.angular_velocity[0],
                         self.vehicle_odom.angular_velocity[1],
-                        self.vehicle_odom.angular_velocity[2]])
+                        self.vehicle_odom.angular_velocity[0],
+                        -self.vehicle_odom.angular_velocity[2]])
 
     def _get_orientation(self):
         q = self.vehicle_odom.q
 
-        w, x, y, z = q[0], q[1], q[2], q[3]
+        w, x, y, z = q[0], q[2], q[1], -q[3]
 
         # Roll (x-axis rotation)
         roll = math.atan2(2.0 * (x*w + y*z), (- x*x - y*y + z*z + w*w))
