@@ -12,7 +12,7 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 from rclpy.callback_groups import ReentrantCallbackGroup
 from px4_msgs.msg import OffboardControlMode, TrajectorySetpoint, VehicleCommand, VehicleLocalPosition, VehicleStatus, ActuatorMotors, VehicleOdometry
-from std_msgs.msg import Float32
+from std_msgs.msg import Float32, Float32MultiArray, MultiArrayDimension
 from geometry_msgs.msg import Pose
 from datetime import datetime
 import os
@@ -51,8 +51,9 @@ class DroneNode(Node):
         self.vehicle_command_publisher = self.create_publisher(VehicleCommand, '/fmu/in/vehicle_command', qos_profile)
         self.actuator_motor_publisher = self.create_publisher(ActuatorMotors, '/fmu/in/actuator_motors', qos_profile)
         self.reward_publisher = self.create_publisher(Float32, '/training_reward', qos_profile)
+        self.state_publisher = self.create_publisher(Float32MultiArray, '/states', qos_profile)
 
-        self.odom_publisher_flag = OdomPublisher.GZ
+        self.odom_publisher_flag = OdomPublisher.PX4
         if self.odom_publisher_flag == OdomPublisher.PX4:
             self.vehicle_odometry_subscriber = self.create_subscription(
             VehicleOdometry, 
@@ -78,6 +79,7 @@ class DroneNode(Node):
             callback_group= self.cb_group
             )
 
+        self.is_testing = True
         self.vehicle_odom = VehicleOdometry()
         self.vehicle_status = VehicleStatus()
         self.offboard_mode_counter = 0
@@ -111,7 +113,7 @@ class DroneNode(Node):
     def publish_actuator_motors(self, control:list[float]):
         msg = ActuatorMotors()
 
-        msg.control = list(np.interp(control, [-1, 1], [0, 1])) + [0] * 8
+        msg.control = list(np.interp(control, [-1.0, 1.0], [0.0, 1.0])) + [0] * 8
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
 
         self.actuator_motor_publisher.publish(msg)
@@ -163,21 +165,18 @@ class DroneNode(Node):
         return np.array([self.vehicle_odom.velocity[1],
                         self.vehicle_odom.velocity[0],
                         -self.vehicle_odom.velocity[2],
-                        self.vehicle_odom.angular_velocity[1],
                         self.vehicle_odom.angular_velocity[0],
-                        -self.vehicle_odom.angular_velocity[2]])
+                        self.vehicle_odom.angular_velocity[1],
+                        self.vehicle_odom.angular_velocity[2]]) # angular velocity in order roll pitch yaw
 
     def _get_orientation(self):
         q = self.vehicle_odom.q
 
         w, x, y, z = q[0], q[2], q[1], -q[3]
 
-        # Roll (x-axis rotation)
-        roll = math.atan2(2.0 * (x*w + y*z), (- x*x - y*y + z*z + w*w))
-        # Pitch (y-axis rotation)
-        pitch = math.asin(-2.0 * (z*x - w*y))
-        # Yaw (z-axis rotation) 
-        yaw = math.atan2(2.0 * (x*y + w*z), (x*x - y*y - z*z + w*w))
+        pitch = math.atan2(2.0 * (x*w + y*z), (- x*x - y*y + z*z + w*w))
+        roll = math.asin(-2.0 * (z*x - w*y))
+        yaw = -math.atan2(2.0 * (x*y + w*z), (x*x - y*y - z*z + w*w))
 
         return np.array([math.degrees(roll), math.degrees(pitch), math.degrees(yaw)])
     
@@ -204,7 +203,22 @@ class DroneNode(Node):
         self.get_logger().info(f'Calibration completed')
         self.calibration_state = CalibrationState.NAVIGATION
 
+    def publish_states(self):
+        msg = Float32MultiArray()
+        msg.layout.dim = [
+            MultiArrayDimension(label='rows', size=12, stride=12),
+            MultiArrayDimension(label='cols', size=1, stride=1)
+        ]
+
+        msg.data = np.concatenate([self._get_position(), self._get_orientation(), self._get_vel()]).tolist()
+
+        self.state_publisher.publish(msg)
+
     def timer_callback(self):
+        self.publish_states()
+
+        if self.is_testing == True: return
+
         self.publish_offboardcontrol_heartbeat_signal()
 
         if(self.offboard_mode_counter < 101):

@@ -1,5 +1,8 @@
 #!/home/plague/pyenv_ros/bin/python3
 
+#TODO:
+# Match the subsciption and publishing frequency
+
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
