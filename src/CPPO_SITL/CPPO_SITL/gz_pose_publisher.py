@@ -19,7 +19,7 @@ class GzNode(Node):
         
         # Parameters
         self.declare_parameter('vehicle_name', 'x500_0')
-        self.declare_parameter('update_rate', 100.0)
+        self.declare_parameter('update_rate', 50.0)
         
         self.vehicle_name = self.get_parameter('vehicle_name').value
         self.dt = 1.0 / self.get_parameter('update_rate').value
@@ -107,8 +107,6 @@ class GzNode(Node):
         """Publish odometry at fixed rate."""
         with self.odom_lock:
             self.vehicle_odom.timestamp = self.get_clock().now().nanoseconds // 1000
-            self.calculate_velocity()
-            self.calculate_ang_velocity()
             self.pose_publisher.publish(self.vehicle_odom)
     
     def gz_callback(self, msg):
@@ -126,6 +124,9 @@ class GzNode(Node):
                         self.vehicle_odom.q[1] = entity.orientation.y
                         self.vehicle_odom.q[2] = entity.orientation.x
                         self.vehicle_odom.q[3] = -entity.orientation.z
+
+                        self.calculate_velocity()
+                        self.calculate_ang_velocity()
                     break
         except Exception as e:
             self.get_logger().error(f'Error in gz_callback: {e}')

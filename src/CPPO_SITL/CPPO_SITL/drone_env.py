@@ -79,7 +79,7 @@ class DroneNode(Node):
             callback_group= self.cb_group
             )
 
-        self.is_testing = True
+        self.is_testing = False
         self.vehicle_odom = VehicleOdometry()
         self.vehicle_status = VehicleStatus()
         self.offboard_mode_counter = 0
@@ -113,7 +113,8 @@ class DroneNode(Node):
     def publish_actuator_motors(self, control:list[float]):
         msg = ActuatorMotors()
 
-        msg.control = list(np.interp(control, [-1.0, 1.0], [0.0, 1.0])) + [0] * 8
+        control = np.interp(control, [-1.0, 1.0], [0.0, 1.0])
+        msg.control = np.array([control[0], control[1], control[2], control[3]]).tolist() + [0] * 8
         msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
 
         self.actuator_motor_publisher.publish(msg)
