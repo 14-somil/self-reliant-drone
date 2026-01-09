@@ -5,6 +5,11 @@
 # speed up training
 # is stabilised off kar diya again
 
+# episode reward
+# restart from last model
+# make all the time delays consistent
+# relaunching the server everytime
+
 import rclpy
 import csv
 import numpy as np
@@ -306,6 +311,19 @@ class DroneEnv(gym.Env):
         self.steps_beyond_terminated = 0
         self.total_steps = 0
         self.is_odom_stabilised = True
+        self.reward_file = None
+        self.csv_writer = None
+        self.episode_reward = 0
+        
+        self.init_reward_file()
+
+    def init_reward_file(self):
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f'rewards/episode_reward_{timestamp}.csv'
+        self.log_file = open(filename, 'w', newline='')
+        self.csv_writer = csv.writer(self.log_file)
+        self.csv_writer.writerow(['timestamp', 'episode', 'reward'])
+        self.node.get_logger().info(f'Logging episode rewards in {filename}')
 
     def _spin(self):
         try:
@@ -413,6 +431,7 @@ class DroneEnv(gym.Env):
         self.time_on_ground = 0
         self.step_counter = 0
         self.steps_beyond_terminated = 0
+        self.episode_reward = 0
 
         initial_observation = self._get_observation()
         info = {
@@ -520,7 +539,14 @@ class DroneEnv(gym.Env):
         info['step_duration'] = step_duration
 
         self.step_counter += 1
+        self.episode_reward += reward
 
+        if done or truncated:
+            self.node.get_logger().info(f'Reward of episode {self.episode_counter}: {self.episode_reward}')
+
+            timestamp = self.node.get_clock().now().nanoseconds / 1e9
+
+            self.csv_writer.writerow([timestamp, self.episode_counter, self.episode_reward])
         return observation, reward, done, truncated, info
     
     def close(self):
