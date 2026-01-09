@@ -17,6 +17,7 @@ from CPPO_SITL.drone_env import DroneEnv
 from CPPO_SITL.callback import TensorboardCallback
 import torch
 import os
+import sys
 
 register(id='DroneEnv', entry_point=DroneEnv)
 
@@ -53,8 +54,12 @@ ppo_params = {
     "policy_kwargs":onpolicy_kwargs
 }
 
+model_ppo = None
 
-model_ppo = PPO(**ppo_params)
+if(len(sys.argv) > 1):
+    model_ppo = PPO.load(sys.argv[-1])
+else:
+    model_ppo = PPO(**ppo_params)
 
 models_dir = "./models/"
 os.makedirs(models_dir, exist_ok=True)

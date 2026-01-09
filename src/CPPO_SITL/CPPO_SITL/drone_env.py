@@ -5,8 +5,6 @@
 # speed up training
 # is stabilised off kar diya again
 
-# episode reward
-# restart from last model
 # make all the time delays consistent
 # relaunching the server everytime
 
@@ -202,9 +200,9 @@ class DroneNode(Node):
             param7=1.0
             )
 
-        time.sleep(1)
+        self.get_clock().sleep_for(1)
         while self.vehicle_status.calibration_enabled == True:
-            time.sleep(0.01)
+            self.get_clock().sleep_for(0.01)
         
         self.get_logger().info(f'Calibration completed')
         self.calibration_state = CalibrationState.NAVIGATION
@@ -520,7 +518,7 @@ class DroneEnv(gym.Env):
         original_action = action
         self.node.actuator_motor_control = original_action #in range [-1, 1]
 
-        time.sleep(0.01)
+        self.node.get_clock().sleep_for(0.01)
         observation = self._get_observation()
         truncated = (self.step_counter >= self.max_steps)
         terminated = self._get_done()

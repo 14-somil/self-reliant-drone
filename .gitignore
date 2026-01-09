@@ -4,3 +4,4 @@ install
 notes.txt
 healthy.yaml
 unhealthy.yaml
+*.png
