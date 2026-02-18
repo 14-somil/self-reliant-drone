@@ -5,7 +5,7 @@ from stable_baselines3 import PPO
 import numpy as np
 import matplotlib.pyplot as plt
 
-best_model = f'/home/plague/models/ppoc_quadcopter_final'
+best_model = f'/home/plague/models/best_model/best_model'
 
 model_ppo = PPO.load(best_model)
 

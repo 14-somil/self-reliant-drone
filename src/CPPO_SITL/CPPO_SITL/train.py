@@ -57,7 +57,7 @@ ppo_params = {
 model_ppo = None
 
 if(len(sys.argv) > 1):
-    model_ppo = PPO.load(sys.argv[-1])
+    model_ppo = PPO.load(sys.argv[-1], env=env)
 else:
     model_ppo = PPO(**ppo_params)
 

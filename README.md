@@ -47,6 +47,7 @@ MicroXRCEAgent udp4 -p 8888
 * Run the training script
 ```sh
 ros2 run CPPO_SITL train # To train with new parameters
+ros2 run CPPO_SITL train # To train with new parameters
 ros2 run CPPO_SITL train <file_name> # To train using a pre-trained model
 ```
 

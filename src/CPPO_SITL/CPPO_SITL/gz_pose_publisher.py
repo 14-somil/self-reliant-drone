@@ -12,13 +12,14 @@ from px4_msgs.msg import VehicleOdometry
 import numpy as np
 import math
 from threading import Lock
+import sys
 
 class GzNode(Node):
     def __init__(self):
         super().__init__('gz_publisher')
         
         # Parameters
-        self.declare_parameter('vehicle_name', 'x500_0')
+        self.declare_parameter('vehicle_name', 'x500_0' if len(sys.argv)<2 else f'{sys.argv[1]}_0')
         self.declare_parameter('update_rate', 50.0)
         
         self.vehicle_name = self.get_parameter('vehicle_name').value

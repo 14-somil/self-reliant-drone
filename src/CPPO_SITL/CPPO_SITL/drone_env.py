@@ -14,6 +14,7 @@ import numpy as np
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.duration import Duration
 from px4_msgs.msg import OffboardControlMode, TrajectorySetpoint, VehicleCommand, VehicleLocalPosition, VehicleStatus, ActuatorMotors, VehicleOdometry
 from std_msgs.msg import Float32, Float32MultiArray, MultiArrayDimension
 from geometry_msgs.msg import Pose
@@ -56,7 +57,7 @@ class DroneNode(Node):
         self.reward_publisher = self.create_publisher(Float32, '/training_reward', qos_profile)
         self.state_publisher = self.create_publisher(Float32MultiArray, '/states', qos_profile)
 
-        self.odom_publisher_flag = OdomPublisher.PX4
+        self.odom_publisher_flag = OdomPublisher.GZ
         if self.odom_publisher_flag == OdomPublisher.PX4:
             self.vehicle_odometry_subscriber = self.create_subscription(
             VehicleOdometry, 
@@ -200,9 +201,9 @@ class DroneNode(Node):
             param7=1.0
             )
 
-        self.get_clock().sleep_for(1)
+        self.get_clock().sleep_for(Duration(seconds=1))
         while self.vehicle_status.calibration_enabled == True:
-            self.get_clock().sleep_for(0.01)
+            self.get_clock().sleep_for(Duration(seconds=0.01))
         
         self.get_logger().info(f'Calibration completed')
         self.calibration_state = CalibrationState.NAVIGATION
@@ -518,7 +519,7 @@ class DroneEnv(gym.Env):
         original_action = action
         self.node.actuator_motor_control = original_action #in range [-1, 1]
 
-        self.node.get_clock().sleep_for(0.01)
+        self.node.get_clock().sleep_for(Duration(seconds=0.01))
         observation = self._get_observation()
         truncated = (self.step_counter >= self.max_steps)
         terminated = self._get_done()
