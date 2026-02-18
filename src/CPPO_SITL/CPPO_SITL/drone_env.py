@@ -15,7 +15,7 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.duration import Duration
-from px4_msgs.msg import OffboardControlMode, TrajectorySetpoint, VehicleCommand, VehicleLocalPosition, VehicleStatus, ActuatorMotors, VehicleOdometry
+from px4_msgs.msg import OffboardControlMode, TrajectorySetpoint, VehicleCommand, VehicleLocalPosition, VehicleStatus, ActuatorMotors, VehicleOdometry, ManualControlSetpoint
 from std_msgs.msg import Float32, Float32MultiArray, MultiArrayDimension
 from geometry_msgs.msg import Pose
 from datetime import datetime
@@ -38,8 +38,12 @@ class OdomPublisher(Enum):
     PX4 = auto()
     GZ = auto()
 
+class ControlMode(Enum):
+    DIRECT_ACTUATOR = auto()
+    MANUAL_CONTROL = auto()
+
 class DroneNode(Node):
-    def __init__(self):
+    def __init__(self, ):
         super().__init__('drone_command')
 
         qos_profile = QoSProfile(
@@ -48,15 +52,25 @@ class DroneNode(Node):
                 history=HistoryPolicy.KEEP_LAST,
                 depth=1
             )
-        
+
+        #Choose control mode
+        self.control_mode = ControlMode.MANUAL_CONTROL
+
         self.cb_group = ReentrantCallbackGroup()
         
-        self.offboard_control_mode_publisher = self.create_publisher(OffboardControlMode, '/fmu/in/offboard_control_mode', qos_profile)
         self.vehicle_command_publisher = self.create_publisher(VehicleCommand, '/fmu/in/vehicle_command', qos_profile)
-        self.actuator_motor_publisher = self.create_publisher(ActuatorMotors, '/fmu/in/actuator_motors', qos_profile)
+        
+        if self.control_mode == ControlMode.DIRECT_ACTUATOR:
+            self.offboard_control_mode_publisher = self.create_publisher(OffboardControlMode, '/fmu/in/offboard_control_mode', qos_profile)
+            self.actuator_motor_publisher = self.create_publisher(ActuatorMotors, '/fmu/in/actuator_motors', qos_profile)
+
+        elif self.control_mode == ControlMode.MANUAL_CONTROL:
+            self.manual_control_publisher = self.create_publisher(ManualControlSetpoint, '/fmu/in/manual_control_input', qos_profile)
+
         self.reward_publisher = self.create_publisher(Float32, '/training_reward', qos_profile)
         self.state_publisher = self.create_publisher(Float32MultiArray, '/states', qos_profile)
 
+        #Choose Odom publisher
         self.odom_publisher_flag = OdomPublisher.GZ
         if self.odom_publisher_flag == OdomPublisher.PX4:
             self.vehicle_odometry_subscriber = self.create_subscription(
@@ -86,8 +100,11 @@ class DroneNode(Node):
         self.is_testing = False
         self.vehicle_odom = VehicleOdometry()
         self.vehicle_status = VehicleStatus()
-        self.offboard_mode_counter = 0
-        self.actuator_motor_control = None #[-1, 1]
+        if self.control_mode == ControlMode.DIRECT_ACTUATOR:
+            self.offboard_mode_counter = 0
+            self.actuator_motor_control = None #[-1, 1]
+        elif self.control_mode == ControlMode.MANUAL_CONTROL:
+            self.manual_control = [-1.0, 0.0, 0.0, 0.0] #[Throttle, Yaw, Pitch, Roll]
         self.calibration_state = CalibrationState.NAVIGATION
 
         self.timer = self.create_timer(0.01, self.timer_callback, callback_group=self.cb_group)
@@ -218,12 +235,8 @@ class DroneNode(Node):
         msg.data = np.concatenate([self._get_position(), self._get_orientation(), self._get_vel()]).tolist()
 
         self.state_publisher.publish(msg)
-
-    def timer_callback(self):
-        self.publish_states()
-
-        if self.is_testing == True: return
-
+    
+    def direct_actuator_control_mode_timer(self):
         self.publish_offboardcontrol_heartbeat_signal()
 
         if(self.offboard_mode_counter < 101):
@@ -247,6 +260,43 @@ class DroneNode(Node):
             ):
                 if self.actuator_motor_control is not None:
                     self.publish_actuator_motors(self.actuator_motor_control)
+
+    def engage_stabilized_mode(self):
+        self.publish_vehicle_command(VehicleCommand.VEHICLE_CMD_DO_SET_MODE, param1=1.0, param2=7.0)
+
+        self.get_logger().info("Switching to stabilized mode")
+
+    def publish_manual_control(self):
+        msg = ManualControlSetpoint()
+
+        msg.timestamp = int(self.get_clock().now().nanoseconds / 1000)
+        msg.valid = True
+
+        msg.data_source = ManualControlSetpoint.SOURCE_MAVLINK_0
+        msg.throttle, msg.yaw, msg.pitch, msg.roll = map(float, self.manual_control)
+        msg.sticks_moving = True
+
+        self.manual_control_publisher.publish(msg)
+
+    def manual_control_mode_timer(self):
+        if(self.vehicle_status.nav_state != VehicleStatus.NAVIGATION_STATE_STAB):
+            self.engage_stabilized_mode()
+
+        else:
+            if self.vehicle_status.arming_state == VehicleStatus.ARMING_STATE_DISARMED :
+                self.arm()
+        self.publish_manual_control()
+
+    def timer_callback(self):
+        self.publish_states()
+
+        if self.is_testing == True: return
+
+        if self.control_mode == ControlMode.DIRECT_ACTUATOR:
+            self.direct_actuator_control_mode_timer()
+
+        elif self.control_mode == ControlMode.MANUAL_CONTROL:
+            self.manual_control_mode_timer()        
 
 class DroneEnv(gym.Env):
     metadata = {'render_modes': []}
@@ -421,7 +471,10 @@ class DroneEnv(gym.Env):
         if initial_position is None:
             initial_position = np.array([0.0, 0.0, 0.0])
         
-        self.node.actuator_motor_control = 4 * [-1.0]
+        if self.node.control_mode == ControlMode.DIRECT_ACTUATOR:
+            self.node.actuator_motor_control = 4 * [-1.0]
+        elif self.node.control_mode == ControlMode.MANUAL_CONTROL:
+            self.node.manual_control = [-1.0, 0.0, 0.0, 0.0]
         self._goto(initial_position)
 
         self.sway_accumulation = np.array([0.0, 0.0, 0.0])
@@ -517,7 +570,11 @@ class DroneEnv(gym.Env):
     def step(self, action):
         start_time = time.perf_counter()
         original_action = action
-        self.node.actuator_motor_control = original_action #in range [-1, 1]
+        
+        if self.node.control_mode == ControlMode.DIRECT_ACTUATOR:
+            self.node.actuator_motor_control = original_action #in range [-1, 1]
+        elif self.node.control_mode == ControlMode.MANUAL_CONTROL:
+            self.node.manual_control = original_action
 
         self.node.get_clock().sleep_for(Duration(seconds=0.01))
         observation = self._get_observation()
