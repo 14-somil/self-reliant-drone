@@ -23,7 +23,7 @@ register(id='DroneEnv', entry_point=DroneEnv)
 
 env = make_vec_env('DroneEnv', n_envs=1)
 
-eval_env = Monitor(gym.make('DroneEnv'))
+eval_env = env
 
 onpolicy_kwargs = dict(
     activation_fn=torch.nn.LeakyReLU,
