@@ -122,8 +122,8 @@ class GzNode(Node):
                         self.vehicle_odom.position[2] = -entity.position.z
                         
                         self.vehicle_odom.q[0] = entity.orientation.w
-                        self.vehicle_odom.q[1] = entity.orientation.y
-                        self.vehicle_odom.q[2] = entity.orientation.x
+                        self.vehicle_odom.q[1] = entity.orientation.x
+                        self.vehicle_odom.q[2] = -entity.orientation.y
                         self.vehicle_odom.q[3] = -entity.orientation.z
 
                         self.calculate_velocity()
