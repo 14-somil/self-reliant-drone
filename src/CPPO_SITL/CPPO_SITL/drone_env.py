@@ -353,7 +353,7 @@ class DroneEnv(gym.Env):
         self.time_on_ground = 0
         self.start_time = time.perf_counter()
         self.step_counter = 0
-        self.max_steps = 1000
+        self.max_steps = 3000
         self.target_position = np.array([0.0, 0.0, 3.0])
         self.sway_accumulation = np.array([0.0, 0.0, 0.0])
         self.episode_counter = 0
