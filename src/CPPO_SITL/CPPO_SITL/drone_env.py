@@ -15,6 +15,7 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.duration import Duration
+from rclpy.parameter import Parameter
 from px4_msgs.msg import OffboardControlMode, TrajectorySetpoint, VehicleCommand, VehicleLocalPosition, VehicleStatus, ActuatorMotors, VehicleOdometry, ManualControlSetpoint
 from std_msgs.msg import Float32, Float32MultiArray, MultiArrayDimension
 from geometry_msgs.msg import Pose
@@ -351,7 +352,7 @@ class DroneEnv(gym.Env):
 
         self.is_training = is_training
         self.time_on_ground = 0
-        self.start_time = time.perf_counter()
+        self.start_time = self.node.get_clock().now().nanoseconds * 1e-9
         self.step_counter = 0
         self.max_steps = 3000
         self.target_position = np.array([0.0, 0.0, 3.0])
@@ -451,10 +452,10 @@ class DroneEnv(gym.Env):
         return np.concatenate([self.node._get_position(), self.node._get_orientation(), self.node._get_vel()])
     
     def wait(self, initial_position):
-        start_time = time.time()
+        start_time = self.node.get_clock().now().nanoseconds * 1e-9
         threshold = 0.75
 
-        while(time.time() - start_time < 10):
+        while(self.node.get_clock().now().nanoseconds * 1e-9 - start_time < 10):
             position = self._get_original_observation()[:3]
 
             if(abs(position[0]-initial_position[0]) < threshold and abs(position[1] - initial_position[1]) < threshold):
@@ -478,7 +479,7 @@ class DroneEnv(gym.Env):
         self._goto(initial_position)
 
         self.sway_accumulation = np.array([0.0, 0.0, 0.0])
-        self.last_step_time = time.perf_counter()
+        self.last_step_time = self.node.get_clock().now().nanoseconds * 1e-9
         self.total_steps += self.step_counter
         self.time_on_ground = 0
         self.step_counter = 0
@@ -509,11 +510,8 @@ class DroneEnv(gym.Env):
             self.node.get_logger().info(f'Drone out of limits. Terminating current step.')
             return True
         
-        # if(roll > math.pi/3 or roll < -math.pi/3 or pitch > math.pi/3 or pitch < -math.pi/3):
-        #     self.node.get_logger().info(f'Pitch or Roll too steep. Terminating step.')
-        #     return True
-        
-        if self.step_counter >= self.max_steps:
+        if(roll > 60 or roll < -60 or pitch > 60 or pitch < -60):
+            self.node.get_logger().info(f'Pitch or Roll too steep. Terminating step.')
             return True
         
         return False
@@ -528,7 +526,7 @@ class DroneEnv(gym.Env):
         penalty_box = 0.1
 
         if all(np.abs(self.target_position - current_position) < penalty_box):
-            hover_reward = 1
+            hover_reward = 1.5
         else:
             hover_reward = 0
 
@@ -568,7 +566,7 @@ class DroneEnv(gym.Env):
         return r
     
     def step(self, action):
-        start_time = time.perf_counter()
+        start_time = self.node.get_clock().now().nanoseconds * 1e-9
         original_action = action
         
         if self.node.control_mode == ControlMode.DIRECT_ACTUATOR:
@@ -591,7 +589,7 @@ class DroneEnv(gym.Env):
             'reward': reward
         }
 
-        step_duration = time.perf_counter() - start_time
+        step_duration = self.node.get_clock().now().nanoseconds * 1e-9 - start_time
         info['step_duration'] = step_duration
 
         self.step_counter += 1
