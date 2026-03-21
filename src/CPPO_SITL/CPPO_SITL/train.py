@@ -42,7 +42,7 @@ def main():
 
         "gamma": 0.95, #Discount factor for future rewards.A high gamma makes the agent prioritize long-term rewards, while a low gamma focuses on short-term rewards
         "gae_lambda": 0.90, #Smoothing parameter for Generalized Advantage Estimation (GAE).Balances bias and variance in the advantage function estimate.
-        "clip_range": 0.02, #Clipping parameter for the probability ratio. Prevents large policy updates that can destabilize training
+        "clip_range": 0.2, #Clipping parameter for the probability ratio. Prevents large policy updates that can destabilize training
         "ent_coef": 0.01,#Encourages exploration by adding the entropy of the policy to the loss function
         "vf_coef": 0.5, #Scales the contribution of the value function loss
         "max_grad_norm": 0.5, #

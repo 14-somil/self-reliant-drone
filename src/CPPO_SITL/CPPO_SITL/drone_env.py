@@ -92,7 +92,7 @@ class DroneNode(Node):
         
         self.vehicle_status_subscriber = self.create_subscription(
             VehicleStatus, 
-            '/fmu/out/vehicle_status_v1', 
+            '/fmu/out/vehicle_status_v2', 
             self.vehicle_status_callback, 
             qos_profile,
             callback_group= self.cb_group
@@ -469,6 +469,11 @@ class DroneEnv(gym.Env):
         #TODO: randomized initial position
         super().reset(seed=seed)
 
+        initial_position = np.array([0.0, 0.0, 3.0 * (1- self.step_counter/3.5e6)])
+
+        if not self.is_training:
+            initial_position = np.array([0.0, 0.0, 0.0])
+
         if initial_position is None:
             initial_position = np.array([0.0, 0.0, 0.0])
         
@@ -523,15 +528,10 @@ class DroneEnv(gym.Env):
         current_velocity = state[6:9]
         current_angular_velocity = state[9:12]
 
-        penalty_box = 0.1
+        hover_reward = 5.0*(1.0 - math.tanh(np.linalg.norm(self.target_position - current_position)/0.8))
 
-        if all(np.abs(self.target_position - current_position) < penalty_box):
-            hover_reward = 1.5
-        else:
-            hover_reward = 0
-
-        alpha_p = 1.0  # Position error weight
-        alpha_v = 0.05  # Velocity error weight
+        alpha_p = 1.5  # Position error weight
+        alpha_v = 0.5  # Velocity error weight
         alpha_omega = 0.001  # Angular velocity error weight
         alpha_rp = 0.02  # Roll and pitch error weight
         alpha_a = 0.025  # Action penalty weight
@@ -563,6 +563,9 @@ class DroneEnv(gym.Env):
             - alpha_a * action_penalty  # Action penalty
         )
         
+        r += 1.0 if current_position[2] > 1.0 else 0.0
+        r += 0.75 if self.step_counter > 2000 else 0.0
+
         return r
     
     def step(self, action):

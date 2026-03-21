@@ -65,20 +65,20 @@ def main():
     # Plotting the actions
     fig, axs = plt.subplots(4, 1, figsize=(10, 15))
 
-    axs[0].plot(action_logs[:, 0], label='thrust_1')
-    axs[0].set_title('Thrust Command 1')
+    axs[0].plot(action_logs[:, 0], label='throttle')
+    axs[0].set_title('Throttle')
     axs[0].legend()
 
-    axs[1].plot(action_logs[:, 1], label='thrust_2')
-    axs[1].set_title('Thrust Command 2')
+    axs[1].plot(action_logs[:, 1], label='yaw')
+    axs[1].set_title('Yaw')
     axs[1].legend()
 
-    axs[2].plot(action_logs[:, 2], label='thrust_3')
-    axs[2].set_title('Thrust Command 3')
+    axs[2].plot(action_logs[:, 2], label='pitch')
+    axs[2].set_title('Pitch')
     axs[2].legend()
 
-    axs[3].plot(action_logs[:, 3], label='thrust_4')
-    axs[3].set_title('Thrust Command 4')
+    axs[3].plot(action_logs[:, 3], label='roll')
+    axs[3].set_title('Roll')
     axs[3].legend()
 
     plt.tight_layout()
