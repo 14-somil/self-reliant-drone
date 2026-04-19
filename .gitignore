@@ -5,3 +5,4 @@ notes.txt
 healthy.yaml
 unhealthy.yaml
 *.png
+__pycache__/

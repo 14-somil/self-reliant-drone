@@ -27,6 +27,7 @@ sudo ldconfig /usr/local/lib/
 ### Clone and build the repo
 * Install and build the ROS2 packages using colcon
 ```sh
+cd ~
 git clone https://github.com/14-somil/self-reliant-drone.git
 cd self-reliant-drone
 colcon build --symlink-install
