@@ -48,6 +48,10 @@ class ControlMode(Enum):
 class DroneNode(Node):
     def __init__(self, headless = True):
         super().__init__('drone_command')
+
+        self.is_active = False
+        self.last_recieved = None
+        self.headless = headless
         self.launch_px4()
 
         qos_profile = QoSProfile(
@@ -110,10 +114,6 @@ class DroneNode(Node):
         elif self.control_mode == ControlMode.MANUAL_CONTROL:
             self.manual_control = [-1.0, 0.0, 0.0, 0.0] #[Throttle, Yaw, Pitch, Roll]
         self.calibration_state = CalibrationState.NAVIGATION
-
-        self.is_active = False
-        self.last_recieved = None
-        self.headless = headless
 
         self.timer = self.create_timer(0.01, self.timer_callback, callback_group=self.cb_group)
 
@@ -314,9 +314,9 @@ class DroneNode(Node):
         self.kill_px4()
 
         drone_model = 'gz_x500'
-        headless = "HEADLESS=1 " if self.headless else ""
+        headless = "HEADLESS=1 " if (self.headless == True) else ""
 
-        cmd = f"cd ~/PX4-Autopilot && make px4_sitl {drone_model}"
+        cmd = f"cd ~/PX4-Autopilot && {headless}make px4_sitl {drone_model}"
 
         self.get_logger().info('Launching PX4 and gz')
 
