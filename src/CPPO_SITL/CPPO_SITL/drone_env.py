@@ -364,6 +364,7 @@ class DroneEnv(gym.Env):
         self.reward_file = None
         self.csv_writer = None
         self.episode_reward = 0
+        self.last_action = np.array([-1.0, 0.0, 0.0, 0.0])
         
         self.init_reward_file()
 
@@ -469,10 +470,10 @@ class DroneEnv(gym.Env):
         #TODO: randomized initial position
         super().reset(seed=seed)
 
-        initial_position = np.array([0.0, 0.0, 3.0 * (1- self.step_counter/3.5e6)])
+        initial_position = np.array([0.0, 0.0, 3.0]) # Training to hover in place
 
         if not self.is_training:
-            initial_position = np.array([0.0, 0.0, 0.0])
+            initial_position = np.array([0.0, 0.0, 3.0])
 
         if initial_position is None:
             initial_position = np.array([0.0, 0.0, 0.0])
@@ -522,51 +523,32 @@ class DroneEnv(gym.Env):
         return False
 
     def _get_reward(self, terminated, action):
-        state = self._get_original_observation()
-        current_position = state[:3]
-        roll, pitch, yaw = state[3:6]
-        current_velocity = state[6:9]
-        current_angular_velocity = state[9:12]
+        state             = self._get_original_observation()
+        pos               = state[:3]
+        roll, pitch, yaw  = state[3], state[4], state[5]     # degrees
+        vel               = state[6:9]
+        ang_vel           = state[9:12]
+ 
+        dist = np.linalg.norm(self.target_position - pos)
+        r_hover = 5.0 * (1.0 - math.tanh(dist / 0.8))        # max ≈ 5.0 at dist=0
+ 
+        r_survive = 0.5 * min(self.step_counter / self.max_steps, 1.0)
+ 
+        p_vel = 0.5 * np.linalg.norm(vel)
+ 
+        p_ang_vel = 0.1 * np.linalg.norm(ang_vel)
+ 
+        p_rp = 0.05 * np.sqrt(roll**2 + pitch**2)
+ 
+        p_action = 0.02 * np.linalg.norm(action - self.last_action)
+ 
+        p_terminate = 10.0 if terminated else 0.0
+ 
+        reward = r_hover + r_survive - p_vel - p_ang_vel - p_rp - p_action - p_terminate
+ 
+        self.last_action = action.copy()
 
-        hover_reward = 5.0*(1.0 - math.tanh(np.linalg.norm(self.target_position - current_position)/0.8))
-
-        alpha_p = 1.5  # Position error weight
-        alpha_v = 0.5  # Velocity error weight
-        alpha_omega = 0.001  # Angular velocity error weight
-        alpha_rp = 0.02  # Roll and pitch error weight
-        alpha_a = 0.025  # Action penalty weight
-
-        # Position error (e_p) - L2 norm between target position and current position
-        e_p = np.linalg.norm(self.target_position - current_position)
-
-        # Velocity error (e_v) - L2 norm between target velocity (0, 0, 0) and current velocity
-        target_velocity = np.array([0.0, 0.0, 0.0])
-        e_v = np.linalg.norm(target_velocity - current_velocity)
-
-        # Angular velocity error (e_ω) - L2 norm between target angular velocity (0, 0, 0) and current angular velocity
-        target_angular_velocity = np.array([0.0, 0.0, 0.0])
-        e_omega = np.linalg.norm(target_angular_velocity - current_angular_velocity)
-
-        # Roll and pitch angle errors (eξ, eφ) - L2 norm for roll and pitch
-        e_rp = np.linalg.norm([roll, pitch, yaw])
-
-        # Action penalty (L2 norm of action)
-        action_penalty = np.linalg.norm(action)
-
-        # Reward calculation
-        r = (
-            hover_reward  # Hover reward
-            - alpha_p * e_p  # Position error penalty
-            - alpha_v * e_v  # Velocity error penalty
-            - alpha_omega * e_omega  # Angular velocity error penalty
-            - alpha_rp * e_rp  # Roll and pitch error penalty
-            - alpha_a * action_penalty  # Action penalty
-        )
-        
-        r += 1.0 if current_position[2] > 1.0 else 0.0
-        r += 0.75 if self.step_counter > 2000 else 0.0
-
-        return r
+        return float(reward)
     
     def step(self, action):
         start_time = self.node.get_clock().now().nanoseconds * 1e-9

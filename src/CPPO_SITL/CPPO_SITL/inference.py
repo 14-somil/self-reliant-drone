@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 def main():
-    best_model = f'/home/plague/models/ppoc_quadcopter_final'
+    best_model = f'/home/plague/models/ppo_quadcopter_2000000_steps'
 
     model_ppo = PPO.load(best_model)
 
