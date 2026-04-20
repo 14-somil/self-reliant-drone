@@ -30,6 +30,8 @@ from gz.msgs10.boolean_pb2 import Boolean
 from gz.msgs10.pose_pb2 import Pose
 import math
 from enum import Enum, auto
+import subprocess
+import psutil
 
 class CalibrationState(Enum):
     NAVIGATION = auto()
@@ -44,8 +46,9 @@ class ControlMode(Enum):
     MANUAL_CONTROL = auto()
 
 class DroneNode(Node):
-    def __init__(self, ):
+    def __init__(self, headless = True):
         super().__init__('drone_command')
+        self.launch_px4()
 
         qos_profile = QoSProfile(
                 reliability=ReliabilityPolicy.BEST_EFFORT,
@@ -108,6 +111,10 @@ class DroneNode(Node):
             self.manual_control = [-1.0, 0.0, 0.0, 0.0] #[Throttle, Yaw, Pitch, Roll]
         self.calibration_state = CalibrationState.NAVIGATION
 
+        self.is_active = False
+        self.last_recieved = None
+        self.headless = headless
+
         self.timer = self.create_timer(0.01, self.timer_callback, callback_group=self.cb_group)
 
     def publish_reward(self, reward):
@@ -120,6 +127,7 @@ class DroneNode(Node):
 
     def vehicle_status_callback(self, msg):
         self.vehicle_status = msg
+        self.last_recieved = self.get_clock().now().seconds_nanoseconds()
 
     def publish_offboardcontrol_heartbeat_signal(self):
         msg = OffboardControlMode()
@@ -288,8 +296,50 @@ class DroneNode(Node):
                 self.arm()
         self.publish_manual_control()
 
+    def kill_px4(self):
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                # Combine name + command line for better matching
+                name = proc.info['name'] or ""
+                cmdline = " ".join(proc.info['cmdline'] or [])
+
+                if "px4" in name.lower() or "px4" in cmdline.lower() or (("gz" in name.lower() or "gz" in cmdline.lower()) and not ("gz_bridge" in name.lower() or "gz_bridge" in cmdline.lower())):
+                    self.get_logger().warning(f"Killing PID {proc.pid} | {name}")
+                    proc.terminate()  # graceful kill
+
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+
+    def launch_px4(self):
+        self.kill_px4()
+
+        drone_model = 'gz_x500'
+        headless = "HEADLESS=1 " if self.headless else ""
+
+        cmd = f"cd ~/PX4-Autopilot && make px4_sitl {drone_model}"
+
+        self.get_logger().info('Launching PX4 and gz')
+
+        subprocess.Popen([
+            "gnome-terminal",
+            "--",
+            "bash",
+            "-c",
+            cmd
+        ])
+
+        self.get_clock().sleep_for(Duration(seconds=30.0))
+
+        self.is_active = True
+
     def timer_callback(self):
         self.publish_states()
+        
+        if self.last_recieved is not None and (self.get_clock().now().seconds_nanoseconds()[0] - self.last_recieved[0]) >= 5.0:
+            self.is_active = False
+
+        if not self.is_active:
+            self.launch_px4()
 
         if self.is_testing == True: return
 
@@ -312,8 +362,8 @@ class DroneEnv(gym.Env):
                 rclpy.init(args=None)
         except RuntimeError:
             pass
-
-        self.node = DroneNode()
+        
+        self.node = DroneNode(headless=is_training)
         self.spin_thread = threading.Thread(target=self._spin, daemon=True)
         self.spin_thread.start()
 
@@ -408,6 +458,7 @@ class DroneEnv(gym.Env):
             self.node.get_logger().info(f'Gazebo reset request successful')
         else:
             self.node.get_logger().info(f'Gazebo reset request failed')
+            self.node.is_active = False
 
     def _clip_and_normalize(self, state):
         MAX_LIN_VEL_XY = 10
@@ -469,6 +520,8 @@ class DroneEnv(gym.Env):
 
         #TODO: randomized initial position
         super().reset(seed=seed)
+
+        while not self.node.is_active: pass
 
         initial_position = np.array([0.0, 0.0, 3.0]) # Training to hover in place
 
